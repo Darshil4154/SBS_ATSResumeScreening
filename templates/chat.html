@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS — Candidate Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Candidate Chatbot</h1>
+            <p class="subtitle">Ask anything about the candidates</p>
+        </header>
+
+        <div style="margin-bottom:16px;">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+            <a href="{{ url_for('export') }}" class="btn btn-export">Export Excel</a>
+        </div>
+
+        <div class="card" style="padding:16px;">
+            <div id="messages" style="height:500px;overflow-y:auto;margin-bottom:16px;padding:8px;">
+                <div class="chat-msg bot">
+                    <strong>ATS Bot:</strong> I have all candidate evaluation data loaded. Ask me anything!
+                    <br>Examples: "Who are the top 5 candidates?", "Compare Anila Zaidi and Catherine Schorn",
+                    "Who has SQL experience?", "Which candidates have red flags?"
+                </div>
+            </div>
+            <form id="chatForm" style="display:flex;gap:8px;">
+                <input type="text" id="question" placeholder="Ask about any candidate..." style="flex:1;padding:12px;border:1px solid #ccc;border-radius:6px;font-size:1rem;">
+                <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>
+            </form>
+        </div>
+    </div>
+    <script>
+    var form = document.getElementById('chatForm');
+    var msgs = document.getElementById('messages');
+    var input = document.getElementById('question');
+    var btn = document.getElementById('sendBtn');
+
+    form.onsubmit = function(e) {
+        e.preventDefault();
+        var q = input.value.trim();
+        if (!q) return;
+
+        msgs.innerHTML += '<div class="chat-msg user"><strong>You:</strong> ' + q + '</div>';
+        input.value = '';
+        btn.disabled = true;
+        btn.textContent = 'Thinking...';
+        msgs.scrollTop = msgs.scrollHeight;
+
+        fetch('/api/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({question: q})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var answer = data.answer || data.error || 'No response';
+            // Convert newlines to <br> for display
+            answer = answer.replace(/\n/g, '<br>');
+            msgs.innerHTML += '<div class="chat-msg bot"><strong>ATS Bot:</strong> ' + answer + '</div>';
+            msgs.scrollTop = msgs.scrollHeight;
+        })
+        .catch(function(err) {
+            msgs.innerHTML += '<div class="chat-msg bot"><strong>ATS Bot:</strong> Error: ' + err + '</div>';
+        })
+        .finally(function() {
+            btn.disabled = false;
+            btn.textContent = 'Send';
+            input.focus();
+        });
+    };
+    </script>
+</body>
+</html>

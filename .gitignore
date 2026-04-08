@@ -1,0 +1,8 @@
+uploads/*
+!uploads/.gitkeep
+exports/*
+!exports/.gitkeep
+ats.db
+__pycache__/
+*.pyc
+.env

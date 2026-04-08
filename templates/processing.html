@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS — Processing</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ATS Resume Screening System</h1>
+            <p class="subtitle">Texas A&M University — Student Business Services</p>
+        </header>
+
+        <div class="card" style="text-align:center;">
+            <h2>Evaluating Candidates...</h2>
+            <div class="progress-container">
+                <div class="progress-bar" id="bar" style="width:0%"></div>
+            </div>
+            <p class="progress-text" id="txt">Starting...</p>
+            <p class="note">~6 seconds per candidate. Page auto-redirects when done.</p>
+        </div>
+    </div>
+    <script>
+    var jdId = {{ jd_id }};
+    function poll() {
+        fetch('/api/status/' + jdId).then(r => r.json()).then(d => {
+            var pct = d.total > 0 ? Math.round(d.done / d.total * 100) : 0;
+            document.getElementById('bar').style.width = pct + '%';
+            document.getElementById('txt').textContent =
+                d.done + ' of ' + d.total + ' done (' + pct + '%)';
+            if (d.done >= d.total && d.total > 0) {
+                document.getElementById('txt').textContent = 'Complete! Redirecting...';
+                setTimeout(function() { window.location.href = '/dashboard'; }, 1000);
+            } else {
+                setTimeout(poll, 2000);
+            }
+        }).catch(function() { setTimeout(poll, 3000); });
+    }
+    poll();
+    </script>
+</body>
+</html>

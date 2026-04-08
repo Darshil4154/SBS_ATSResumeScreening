@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS — Results Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container wide">
+        <header>
+            <h1>ATS Resume Screening — Results</h1>
+            <p class="subtitle">FBS Senior Analyst — Texas A&M University Student Business Services</p>
+        </header>
+
+        {% set completed = candidates | selectattr('status', 'equalto', 'completed') | list %}
+        {% set failed = candidates | selectattr('status', 'equalto', 'failed') | list %}
+
+        <!-- Stats -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-value">{{ completed | length }}</div>
+                <div class="stat-label">Candidates</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{% if completed %}{{ (completed | map(attribute='application_score') | sum / completed | length) | round(1) }}{% else %}0{% endif %}</div>
+                <div class="stat-label">Avg Score</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{% if completed %}{{ completed | map(attribute='application_score') | max }}{% else %}0{% endif %}</div>
+                <div class="stat-label">Highest</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{% if completed %}{{ completed | map(attribute='application_score') | min }}{% else %}0{% endif %}</div>
+                <div class="stat-label">Lowest</div>
+            </div>
+        </div>
+
+        <!-- Score Distribution Chart -->
+        {% if completed %}
+        <div class="card" style="padding:16px;margin-bottom:16px;">
+            <h3 style="margin-bottom:12px;color:#500000;">Score Distribution</h3>
+            <div class="chart-container">
+                {% for c in completed %}
+                <div class="chart-bar-wrap">
+                    <div class="chart-label">{{ (c.candidate_name or c.filename).split(' ')[0] }}</div>
+                    <div class="chart-bar-bg">
+                        <div class="chart-bar {% if c.application_score >= 90 %}bar-high{% elif c.application_score >= 70 %}bar-mid{% else %}bar-low{% endif %}"
+                             style="width:{{ (c.application_score / 140 * 100) | round }}%">
+                            {{ c.application_score }}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Actions -->
+        <div style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;">
+            <a href="{{ url_for('export') }}" class="btn btn-export">Export to Excel</a>
+            <a href="{{ url_for('upload_resumes') }}" class="btn btn-primary">Upload More Resumes</a>
+            {% if failed %}<a href="{{ url_for('retry_failed') }}" class="btn btn-retry">Retry Failed ({{ failed | length }})</a>{% endif %}
+        </div>
+
+        {% if failed %}
+        <div class="alert alert-error">
+            <strong>{{ failed | length }} failed:</strong>
+            {% for c in failed %}<span>{{ c.filename }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+        </div>
+        {% endif %}
+
+        <p style="color:#666;font-size:0.85rem;margin-bottom:8px;">Click any row to expand full justification.</p>
+
+        <!-- Results Table -->
+        <table id="t">
+            <thead>
+                <tr>
+                    <th style="width:30px"></th>
+                    <th>#</th>
+                    <th style="text-align:left">Candidate</th>
+                    {% for key in criteria_order %}
+                    <th title="{{ criteria_labels[key] }}">{{ criteria_labels[key][:10] }}</th>
+                    {% endfor %}
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for c in completed %}
+                <tr class="candidate-row {% if loop.index <= 5 %}top-five{% endif %}" onclick="toggle({{ loop.index0 }})">
+                    <td class="expand-btn" id="btn-{{ loop.index0 }}">+</td>
+                    <td>{{ loop.index }}</td>
+                    <td style="text-align:left"><strong>{{ c.candidate_name or c.filename }}</strong></td>
+                    {% for key in criteria_order %}
+                        {% set s = c.scores.get(key, {}).get('score', 0) %}
+                        <td class="score-cell {% if s >= 8 %}score-high{% elif s >= 5 %}score-mid{% else %}score-low{% endif %}">{{ s }}/10</td>
+                    {% endfor %}
+                    <td class="score-total">{{ c.application_score }}/140</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Detail Panels -->
+        {% for c in completed %}
+        <div class="detail-panel" id="panel-{{ loop.index0 }}">
+            <div class="detail-header">
+                <h3>{{ c.candidate_name or c.filename }} — {{ c.application_score }}/140</h3>
+            </div>
+
+            <div class="detail-section">
+                <h4>Executive Summary</h4>
+                <p class="summary-text">{{ c.overall_summary or 'N/A' }}</p>
+            </div>
+
+            <div class="detail-columns">
+                <div class="detail-section">
+                    <h4>Top Strengths</h4>
+                    <ol>{% for s in c.top_strengths %}<li>{{ s }}</li>{% endfor %}</ol>
+                </div>
+                <div class="detail-section">
+                    <h4>Red Flags / Concerns</h4>
+                    {% if c.red_flags %}
+                    <ul class="red-flags-list">{% for f in c.red_flags %}<li>{{ f }}</li>{% endfor %}</ul>
+                    {% else %}
+                    <p style="color:#2e7d32;">No concerns identified.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <h4>Criterion-by-Criterion Breakdown</h4>
+            {% for key in criteria_order %}
+                {% set sc = c.scores.get(key, {}) %}
+                {% set sv = sc.get('score', 0) %}
+                <div class="justification-card">
+                    <div class="jc-header">
+                        <span>{{ criteria_labels[key] }}</span>
+                        <span class="jc-score {% if sv >= 8 %}score-high{% elif sv >= 5 %}score-mid{% else %}score-low{% endif %}">{{ sv }}/10</span>
+                    </div>
+                    <div class="jc-body">
+                        <p>{{ sc.get('justification', 'N/A') }}</p>
+                        {% if sc.get('keywords_found') %}<p class="jc-meta"><strong>Found:</strong> {% for kw in sc.keywords_found %}<span class="kw-found">{{ kw }}</span>{% endfor %}</p>{% endif %}
+                        {% if sc.get('keywords_missing') %}<p class="jc-meta"><strong>Missing:</strong> {% for kw in sc.keywords_missing %}<span class="kw-missing">{{ kw }}</span>{% endfor %}</p>{% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+
+        <!-- Inline Chatbot -->
+        <div class="card chatbot-card" id="chatSection">
+            <h3 style="color:#500000;margin-bottom:12px;">Ask About Candidates</h3>
+            <div id="messages">
+                <div class="chat-msg bot">
+                    <strong>ATS Bot:</strong> I have all {{ completed | length }} candidate evaluations loaded. Ask me anything!<br>
+                    Try: "Who are the top 3?", "Compare Catherine Schorn and Jay Green", "Who has SQL experience?", "Who should I interview?", "Summarize red flags for all candidates"
+                </div>
+            </div>
+            <form id="chatForm">
+                <input type="text" id="question" placeholder="Ask about any candidate..." autocomplete="off">
+                <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    function toggle(idx) {
+        var panel = document.getElementById('panel-' + idx);
+        var btn = document.getElementById('btn-' + idx);
+        var showing = panel.style.display === 'block';
+        document.querySelectorAll('.detail-panel').forEach(function(p) { p.style.display = 'none'; });
+        document.querySelectorAll('.expand-btn').forEach(function(b) { b.textContent = '+'; });
+        if (!showing) { panel.style.display = 'block'; btn.textContent = '-'; }
+    }
+
+    // Chatbot
+    var form = document.getElementById('chatForm');
+    var msgs = document.getElementById('messages');
+    var input = document.getElementById('question');
+    var btn = document.getElementById('sendBtn');
+
+    form.onsubmit = function(e) {
+        e.preventDefault();
+        var q = input.value.trim();
+        if (!q) return;
+        msgs.innerHTML += '<div class="chat-msg user"><strong>You:</strong> ' + q + '</div>';
+        input.value = '';
+        btn.disabled = true;
+        btn.textContent = 'Thinking...';
+        msgs.scrollTop = msgs.scrollHeight;
+        fetch('/api/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({question: q})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var answer = (data.answer || data.error || 'No response').replace(/\n/g, '<br>');
+            msgs.innerHTML += '<div class="chat-msg bot"><strong>ATS Bot:</strong> ' + answer + '</div>';
+            msgs.scrollTop = msgs.scrollHeight;
+        })
+        .catch(function(err) {
+            msgs.innerHTML += '<div class="chat-msg bot" style="color:red;"><strong>Error:</strong> ' + err + '</div>';
+        })
+        .finally(function() { btn.disabled = false; btn.textContent = 'Send'; input.focus(); });
+    };
+    </script>
+</body>
+</html>

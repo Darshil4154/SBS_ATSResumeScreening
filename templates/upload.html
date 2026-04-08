@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS — Upload Resumes</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ATS Resume Screening System</h1>
+            <p class="subtitle">Texas A&M University — Student Business Services</p>
+        </header>
+
+        <div class="card">
+            <h2>Upload Resumes (batch upload supported)</h2>
+            <p>Upload up to 10 resumes at a time. You can come back and upload more batches.</p>
+            {% if done > 0 %}
+            <div class="alert" style="background:#e8f5e9;border:1px solid #4caf50;color:#2e7d32;">
+                <strong>{{ done }} of {{ total }} candidates already processed.</strong> Upload more below or
+                <a href="{{ url_for('dashboard') }}">view results</a>.
+            </div>
+            {% endif %}
+
+            <form action="{{ url_for('upload_resumes_submit') }}" method="post" enctype="multipart/form-data">
+                <div class="file-upload">
+                    <input type="file" id="files" name="resume_files" accept=".pdf,.docx" multiple required>
+                    <p class="file-count" id="fc"></p>
+                </div>
+                <button type="submit" class="btn btn-primary" id="btn">Upload & Process</button>
+            </form>
+        </div>
+
+        <div style="text-align:center;margin-top:16px;">
+            {% if done > 0 %}
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">View Current Results</a>
+            {% endif %}
+        </div>
+    </div>
+    <script>
+    document.getElementById('files').onchange = function() {
+        document.getElementById('fc').textContent = this.files.length + ' file(s) selected';
+    };
+    document.querySelector('form').onsubmit = function() {
+        document.getElementById('btn').disabled = true;
+        document.getElementById('btn').textContent = 'Uploading...';
+    };
+    </script>
+</body>
+</html>

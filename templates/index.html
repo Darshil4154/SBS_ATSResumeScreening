@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS Resume Screening</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ATS Resume Screening System</h1>
+            <p class="subtitle">Texas A&M University — Student Business Services</p>
+            <p class="subtitle">FBS Senior Analyst Position</p>
+        </header>
+
+        <div class="card">
+            <h2>Step 1: Upload Job Description</h2>
+            <p>Upload the JD file (PDF or DOCX).</p>
+            {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+            <form action="{{ url_for('upload_jd') }}" method="post" enctype="multipart/form-data">
+                <div class="file-upload">
+                    <input type="file" name="jd_file" accept=".pdf,.docx" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Upload JD & Continue</button>
+            </form>
+        </div>
+
+        {% if has_results %}
+        <div class="card">
+            <h2>Already have results?</h2>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Go to Dashboard</a>
+            <a href="{{ url_for('upload_resumes') }}" class="btn btn-secondary">Upload More Resumes</a>
+            <a href="{{ url_for('chat_page') }}" class="btn btn-export">Open Chatbot</a>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
