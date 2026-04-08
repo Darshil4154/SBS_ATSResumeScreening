@@ -69,20 +69,23 @@ def index():
     return render_template('index.html', has_results=has_results)
 
 
-@app.route('/upload-jd', methods=['POST'])
+@app.route('/upload-jd', methods=['GET', 'POST'])
 def upload_jd():
-    file = request.files.get('jd_file')
-    if not file or file.filename == '':
+    if request.method == 'GET':
         return redirect(url_for('index'))
-    filepath = os.path.join(UPLOAD_DIR, file.filename)
-    file.save(filepath)
     try:
+        file = request.files.get('jd_file')
+        if not file or file.filename == '':
+            return redirect(url_for('index'))
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        filepath = os.path.join(UPLOAD_DIR, file.filename)
+        file.save(filepath)
         text = extract_text(filepath)
+        jd_id = save_jd(file.filename, text)
+        session['jd_id'] = jd_id
+        return redirect(url_for('upload_resumes'))
     except Exception as e:
-        return render_template('index.html', error=f"Failed to parse JD: {e}")
-    jd_id = save_jd(file.filename, text)
-    session['jd_id'] = jd_id
-    return redirect(url_for('upload_resumes'))
+        return render_template('index.html', error=f"Error: {e}")
 
 
 @app.route('/upload-resumes')
@@ -94,12 +97,15 @@ def upload_resumes():
     return render_template('upload.html', jd_id=jd_id, done=status['done'], total=status['total'])
 
 
-@app.route('/upload-resumes-submit', methods=['POST'])
+@app.route('/upload-resumes-submit', methods=['GET', 'POST'])
 def upload_resumes_submit():
+    if request.method == 'GET':
+        return redirect(url_for('index'))
     jd_id = session.get('jd_id')
     if not jd_id:
         return redirect(url_for('index'))
 
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
     files = request.files.getlist('resume_files')
     failed = []
     for f in files:
