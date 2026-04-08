@@ -55,6 +55,14 @@ def process_candidates_bg(jd_id):
         traceback.print_exc()
 
 
+@app.route('/health')
+def health():
+    key = os.environ.get('OPENROUTER_API_KEY', '')
+    has_key = 'YES' if key else 'NO'
+    key_preview = key[:10] + '...' if key else 'NOT SET'
+    return jsonify({'status': 'ok', 'api_key_set': has_key, 'key_preview': key_preview})
+
+
 @app.route('/')
 def index():
     jd_id = session.get('jd_id')
