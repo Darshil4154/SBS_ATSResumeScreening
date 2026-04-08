@@ -2,7 +2,6 @@ import os
 import json
 import time
 import threading
-import concurrent.futures
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, session
 
 from database import init_db, save_jd, get_jd, save_candidate, update_candidate_scores, \
@@ -22,18 +21,6 @@ os.makedirs(EXPORT_DIR, exist_ok=True)
 init_db()
 
 
-def process_one(args):
-    jd_text, row = args
-    cid, filename, resume_text = row['id'], row['filename'], row['resume_text']
-    try:
-        print(f"  [{filename}]", flush=True)
-        data = evaluate_resume(jd_text, resume_text)
-        update_candidate_scores(cid, data)
-    except Exception as e:
-        print(f"  FAILED {filename}: {e}", flush=True)
-        mark_candidate_failed(cid, str(e))
-
-
 def process_candidates_bg(jd_id):
     try:
         jd = get_jd(jd_id)
@@ -47,10 +34,19 @@ def process_candidates_bg(jd_id):
         conn.close()
 
         total = len(rows)
-        print(f"\n=== Processing {total} candidates (5 parallel) ===", flush=True)
+        print(f"\n=== Processing {total} candidates ===", flush=True)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
-            pool.map(process_one, [(jd_text, row) for row in rows])
+        for i, row in enumerate(rows):
+            cid, filename, resume_text = row['id'], row['filename'], row['resume_text']
+            print(f"  [{i+1}/{total}] {filename}", flush=True)
+            try:
+                data = evaluate_resume(jd_text, resume_text)
+                update_candidate_scores(cid, data)
+                print(f"    -> {data.get('candidate_name','?')}: {data['application_score']}/140", flush=True)
+            except Exception as e:
+                print(f"    -> FAILED: {e}", flush=True)
+                mark_candidate_failed(cid, str(e))
+            time.sleep(1)
 
         print(f"=== All {total} done ===\n", flush=True)
     except Exception as e:
