@@ -109,30 +109,36 @@ def upload_resumes_submit():
     if not jd_id:
         return redirect(url_for('index'))
 
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    files = request.files.getlist('resume_files')
-    failed = []
-    for f in files:
-        if f.filename == '':
-            continue
-        filepath = os.path.join(UPLOAD_DIR, f.filename)
-        f.save(filepath)
-        try:
-            text = extract_text(filepath)
-            if not text.strip():
-                failed.append(f.filename)
+    try:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        files = request.files.getlist('resume_files')
+        failed = []
+        for f in files:
+            if f.filename == '':
                 continue
-            save_candidate(jd_id, f.filename, text)
-        except Exception:
-            failed.append(f.filename)
+            filepath = os.path.join(UPLOAD_DIR, f.filename)
+            f.save(filepath)
+            try:
+                text = extract_text(filepath)
+                if not text.strip():
+                    failed.append(f.filename)
+                    continue
+                save_candidate(jd_id, f.filename, text)
+            except Exception:
+                failed.append(f.filename)
 
-    session['parse_failures'] = failed
+        session['parse_failures'] = failed
 
-    thread = threading.Thread(target=process_candidates_bg, args=(jd_id,))
-    thread.daemon = True
-    thread.start()
+        thread = threading.Thread(target=process_candidates_bg, args=(jd_id,))
+        thread.daemon = True
+        thread.start()
 
-    return redirect(url_for('processing'))
+        return redirect(url_for('processing'))
+    except Exception as e:
+        print(f"UPLOAD ERROR: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return render_template('index.html', error=f"Upload error: {e}")
 
 
 @app.route('/processing')
