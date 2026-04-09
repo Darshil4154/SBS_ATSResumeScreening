@@ -4,14 +4,15 @@ import time
 import threading
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, session
 
-from database import init_db, save_jd, get_jd, save_candidate, update_candidate_scores, \
-    mark_candidate_failed, get_candidates, get_processing_status, get_db
+from database import init_db, save_jd, get_jd, save_candidate, update_candidate_text, \
+    update_candidate_scores, mark_candidate_failed, get_candidates, get_processing_status, get_db
 from parser import extract_text
 from evaluator import evaluate_resume, chat_answer, CRITERIA_ORDER, CRITERIA_LABELS
 from exporter import export_to_excel
 
 app = Flask(__name__)
 app.secret_key = 'ats-tamu-2026-secret-key'
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), 'exports')
@@ -21,7 +22,42 @@ os.makedirs(EXPORT_DIR, exist_ok=True)
 init_db()
 
 
-def process_candidates_bg(jd_id):
+def process_candidates_bg(jd_id, candidate_files):
+    """Process new uploads: extract text from files + evaluate via API.
+    candidate_files = {cid: filepath, ...}"""
+    try:
+        jd = get_jd(jd_id)
+        jd_text = jd['text_content']
+
+        total = len(candidate_files)
+        print(f"\n=== Processing {total} candidates ===", flush=True)
+
+        for i, (cid, filepath) in enumerate(candidate_files.items()):
+            filename = os.path.basename(filepath)
+            print(f"  [{i+1}/{total}] {filename}", flush=True)
+            try:
+                resume_text = extract_text(filepath)
+                if not resume_text.strip():
+                    mark_candidate_failed(cid, "Could not extract text from file")
+                    print(f"    -> FAILED: empty text", flush=True)
+                    continue
+                update_candidate_text(cid, resume_text)
+                data = evaluate_resume(jd_text, resume_text)
+                update_candidate_scores(cid, data)
+                print(f"    -> {data.get('candidate_name','?')}: {data['application_score']}/140", flush=True)
+            except Exception as e:
+                print(f"    -> FAILED: {e}", flush=True)
+                mark_candidate_failed(cid, str(e))
+
+        print(f"=== All {total} done ===\n", flush=True)
+    except Exception as e:
+        print(f"BG ERROR: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+
+
+def retry_candidates_bg(jd_id):
+    """Retry failed candidates using text already stored in DB."""
     try:
         jd = get_jd(jd_id)
         jd_text = jd['text_content']
@@ -34,11 +70,14 @@ def process_candidates_bg(jd_id):
         conn.close()
 
         total = len(rows)
-        print(f"\n=== Processing {total} candidates ===", flush=True)
+        print(f"\n=== Retrying {total} candidates ===", flush=True)
 
         for i, row in enumerate(rows):
             cid, filename, resume_text = row['id'], row['filename'], row['resume_text']
             print(f"  [{i+1}/{total}] {filename}", flush=True)
+            if not resume_text or not resume_text.strip():
+                mark_candidate_failed(cid, "No resume text available for retry")
+                continue
             try:
                 data = evaluate_resume(jd_text, resume_text)
                 update_candidate_scores(cid, data)
@@ -46,7 +85,6 @@ def process_candidates_bg(jd_id):
             except Exception as e:
                 print(f"    -> FAILED: {e}", flush=True)
                 mark_candidate_failed(cid, str(e))
-            time.sleep(1)
 
         print(f"=== All {total} done ===\n", flush=True)
     except Exception as e:
@@ -112,24 +150,17 @@ def upload_resumes_submit():
     try:
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         files = request.files.getlist('resume_files')
-        failed = []
+        candidate_files = {}
+
         for f in files:
             if f.filename == '':
                 continue
             filepath = os.path.join(UPLOAD_DIR, f.filename)
             f.save(filepath)
-            try:
-                text = extract_text(filepath)
-                if not text.strip():
-                    failed.append(f.filename)
-                    continue
-                save_candidate(jd_id, f.filename, text)
-            except Exception:
-                failed.append(f.filename)
+            cid = save_candidate(jd_id, f.filename, '')
+            candidate_files[cid] = filepath
 
-        session['parse_failures'] = failed
-
-        thread = threading.Thread(target=process_candidates_bg, args=(jd_id,))
+        thread = threading.Thread(target=process_candidates_bg, args=(jd_id, candidate_files))
         thread.daemon = True
         thread.start()
 
@@ -184,7 +215,7 @@ def retry_failed():
     conn.execute("UPDATE candidate SET status='pending', error_message=NULL WHERE jd_id=? AND status='failed'", (jd_id,))
     conn.commit()
     conn.close()
-    thread = threading.Thread(target=process_candidates_bg, args=(jd_id,))
+    thread = threading.Thread(target=retry_candidates_bg, args=(jd_id,))
     thread.daemon = True
     thread.start()
     return redirect(url_for('processing'))

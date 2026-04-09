@@ -75,6 +75,13 @@ def save_candidate(jd_id, filename, resume_text):
     return cid
 
 
+def update_candidate_text(cid, resume_text):
+    conn = get_db()
+    conn.execute('UPDATE candidate SET resume_text = ? WHERE id = ?', (resume_text, cid))
+    conn.commit()
+    conn.close()
+
+
 def update_candidate_scores(cid, data):
     conn = get_db()
     conn.execute('''
